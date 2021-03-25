@@ -1,132 +1,36 @@
-module sid_voice (clock, reset, freq_lo, freq_hi, pw_lo, pw_hi,
-                  control, att_dec, sus_rel, osc_msb_in, osc_msb_out,
-                  signal_out, osc_out, env_out);
 
-// Input Signals
-input wire [0:0] clock;
-input wire [0:0] reset;
-input wire [7:0] freq_lo;
-input wire [7:0] freq_hi;
-input wire [7:0] pw_lo;
-input wire [3:0] pw_hi;
-input wire [7:0] control;
-input wire [7:0] att_dec;
-input wire [7:0] sus_rel;
-input wire [0:0] osc_msb_in;
+module sid_tables
+(
+	input            clock,
 
-// Output Signals
-output wire [ 0:0] osc_msb_out;
-output wire [11:0] signal_out;
-output wire [ 7:0] osc_out;
-output wire [ 7:0] env_out;
+	input     [11:0] sawtooth,
+	input     [11:0] triangle,
 
-// Internal Signals
-reg  [23:0] oscillator;
-reg  [ 0:0] osc_edge;
-reg  [ 0:0] osc_msb_in_prv;
-reg  [11:0] triangle;
-reg  [11:0] sawtooth;
-reg  [11:0] pulse;
-reg  [11:0] noise;
-reg  [22:0] lfsr_noise;
-wire [ 7:0] envelope;
-reg  [11:0] wave_out;
-reg  [19:0] dca_out;
+	output reg [7:0] _st_out,
+	output reg [7:0] p_t_out,
+	output reg [7:0] ps__out,
+	output reg [7:0] pst_out
+);
 
-`define noise_ctrl   control[7]
-`define pulse_ctrl   control[6]
-`define saw_ctrl     control[5]
-`define tri_ctrl     control[4]
-`define test_ctrl    control[3]
-`define ringmod_ctrl control[2]
-`define sync_ctrl    control[1]
-
-// Signal Assignments
-assign osc_msb_out = oscillator[23];
-assign signal_out  = dca_out[19:8];
-assign osc_out     = wave_out[11:4];
-assign env_out     = envelope;
-
-// Digital Controlled Amplifier
-always @(posedge clock)
-begin
-  dca_out <= wave_out * envelope;
-end
-
-// Envelope Instantiation
-sid_envelope adsr (.clock(clock), .reset(reset), .gate(control[0]),
-                  .att_dec(att_dec), .sus_rel(sus_rel), .envelope(envelope));
-
-// Phase Accumulating Oscillator
-always @(posedge clock)
-begin
-  osc_msb_in_prv <= osc_msb_in;
-  if (reset || `test_ctrl ||
-     ((`sync_ctrl) && (!osc_msb_in) && (osc_msb_in != osc_msb_in_prv)))
-    oscillator <= 24'h000000;
-  else
-    oscillator <= oscillator + {freq_hi, freq_lo};
-end
-
-// Waveform Generator
-always @(posedge clock)
-begin
-  if (reset)
-    begin
-      triangle   <= 12'h000;
-      sawtooth   <= 12'h000;
-      pulse      <= 12'h000;
-      noise      <= 12'h000;
-      osc_edge   <= 1'b0;
-      lfsr_noise <= 23'h7fffff;
-    end
-  else
-    begin
-      triangle <= (`ringmod_ctrl) ?
-                  {({11{osc_msb_in}} ^
-                  {{11{oscillator[23]}}}) ^ oscillator[22:12], 1'b0} :
-                  {{11{oscillator[23]}} ^ oscillator[22:12], 1'b0};
-      sawtooth <= oscillator[23:12];
-      pulse <= (`test_ctrl) ? 12'hfff :
-               (oscillator[23:12] >= {pw_hi, pw_lo}) ? {12{1'b1}} : {12{1'b0}};
-      noise <= {lfsr_noise[21], lfsr_noise[19], lfsr_noise[15],
-               lfsr_noise[12], lfsr_noise[10], lfsr_noise[6],
-               lfsr_noise[3], lfsr_noise[1], 4'b0000};
-      osc_edge <= (oscillator[19] && !osc_edge) ? 1'b1 :
-                  (!oscillator[19] && osc_edge) ? 1'b0 : osc_edge;
-      lfsr_noise <= (oscillator[19] && !osc_edge) ?
-                    {lfsr_noise[21:0], (lfsr_noise[22] | `test_ctrl) ^
-                    lfsr_noise[17]} : lfsr_noise;
-    end
-end
-
-// Waveform Output Selector
-always @(*) begin
-	case (control[7:4])
-		4'b0001: wave_out = triangle;
-		4'b0010: wave_out = sawtooth;
-		4'b0011: wave_out = {wave__st[sawtooth], 4'b0000};
-		4'b0100: wave_out = pulse;
-		4'b0101: wave_out = {wave_p_t[triangle[11:1]], 4'b0000} & pulse;
-		4'b0110: wave_out = {wave_ps_[sawtooth], 4'b0000} & pulse;
-		4'b0111: wave_out = {wave_pst[sawtooth], 4'b0000} & pulse;
-		4'b1000: wave_out = noise;
-		default: wave_out = 0;
-	endcase
+always @(posedge clock) begin
+	_st_out <= wave__st[sawtooth];
+	p_t_out <= wave_p_t[triangle[11:1]];
+	ps__out <= wave_ps_[sawtooth];
+	pst_out <= wave_pst[sawtooth];
 end
 
 //
-// more efficient wave table (uses half LCs than the original) (Sorgelig)
+// convert combinatorial logic to ROM (Sorgelig)
 //
 
-reg [7:0] wave__st[4096];
-reg [7:0] wave_p_t[2048];
-reg [7:0] wave_ps_[4096];
-reg [7:0] wave_pst[4096];
+wire [7:0] wave__st[4096];
+wire [7:0] wave_p_t[2048];
+wire [7:0] wave_ps_[4096];
+wire [7:0] wave_pst[4096];
 
-initial begin
-	integer i;
-	for(i = 0; i<4096; i=i+1) wave__st[i] =
+generate
+	genvar i;
+	for(i = 0; i<4096; i=i+1) begin : b1 assign wave__st[i] =
 		(i < 'h07e) ? 8'h00 : (i < 'h080) ? 8'h03 : (i < 'h0fc) ? 8'h00 : (i < 'h100) ? 8'h07 :
 		(i < 'h17e) ? 8'h00 : (i < 'h180) ? 8'h03 : (i < 'h1f8) ? 8'h00 : (i < 'h1fc) ? 8'h0e :
 		(i < 'h200) ? 8'h0f : (i < 'h27e) ? 8'h00 : (i < 'h280) ? 8'h03 : (i < 'h2fc) ? 8'h00 :
@@ -154,8 +58,9 @@ initial begin
 		(i < 'hf2b) ? 8'he0 : (i < 'hf2c) ? 8'hc0 : (i < 'hf2d) ? 8'he0 : (i < 'hf2e) ? 8'hc0 :
 		(i < 'hf7e) ? 8'he0 : (i < 'hf80) ? 8'he3 : (i < 'hfbf) ? 8'hf0 : (i < 'hfc0) ? 8'hf1 :
 		(i < 'hfe0) ? 8'hf8 : (i < 'hff0) ? 8'hfc : (i < 'hff8) ? 8'hfe : 8'hff;
+	end
 
-	for(i = 0; i<2048; i=i+1) wave_p_t[i] =
+	for(i = 0; i<2048; i=i+1) begin : b2 assign wave_p_t[i] =
 		(i < 'h0ff) ? 8'h00 : (i < 'h100) ? 8'h07 : (i < 'h1fb) ? 8'h00 : (i < 'h1fc) ? 8'h1c :
 		(i < 'h1fd) ? 8'h00 : (i < 'h1fe) ? 8'h3c : (i < 'h200) ? 8'h3f : (i < 'h2fd) ? 8'h00 :
 		(i < 'h2fe) ? 8'h0c : (i < 'h2ff) ? 8'h5e : (i < 'h300) ? 8'h5f : (i < 'h377) ? 8'h00 :
@@ -202,8 +107,9 @@ initial begin
 		(i < 'h7c0) ? 8'hf7 : (i < 'h7c3) ? 8'hf0 : (i < 'h7c4) ? 8'hf8 : (i < 'h7c5) ? 8'hf0 :
 		(i < 'h7db) ? 8'hf8 : (i < 'h7dd) ? 8'hfa : (i < 'h7e0) ? 8'hfb : (i < 'h7e1) ? 8'hf8 :
 		(i < 'h7ed) ? 8'hfc : (i < 'h7f0) ? 8'hfd : (i < 'h7f8) ? 8'hfe : 8'hff;
+	end
 
-	for(i = 0; i<4096; i=i+1) wave_ps_[i] =
+	for(i = 0; i<4096; i=i+1) begin : b3 assign wave_ps_[i] =
 		(i < 'h07f) ? 8'h00 : (i < 'h080) ? 8'h03 : (i < 'h0bf) ? 8'h00 : (i < 'h0c0) ? 8'h01 :
 		(i < 'h0ff) ? 8'h00 : (i < 'h100) ? 8'h0f : (i < 'h17f) ? 8'h00 : (i < 'h180) ? 8'h07 :
 		(i < 'h1bf) ? 8'h00 : (i < 'h1c0) ? 8'h03 : (i < 'h1df) ? 8'h00 : (i < 'h1e0) ? 8'h01 :
@@ -326,8 +232,9 @@ initial begin
 		(i < 'hfbb) ? 8'hfa : (i < 'hfc0) ? 8'hfb : (i < 'hfc3) ? 8'hf8 : (i < 'hfc4) ? 8'hfc :
 		(i < 'hfc5) ? 8'hf8 : (i < 'hfd7) ? 8'hfc : (i < 'hfd8) ? 8'hfd : (i < 'hfdb) ? 8'hfc :
 		(i < 'hfe0) ? 8'hfd : (i < 'hfe2) ? 8'hfc : (i < 'hff0) ? 8'hfe : 8'hff;
+	end
 
-	for(i = 0; i<4096; i=i+1) wave_pst[i] =
+	for(i = 0; i<4096; i=i+1) begin : b4 assign wave_pst[i] =
 		(i < 'h3ff) ? 8'h00 : (i < 'h400) ? 8'h1f : (i < 'h7ee) ? 8'h00 : (i < 'h7ef) ? 8'h20 :
 		(i < 'h7f0) ? 8'h70 : (i < 'h7f1) ? 8'h60 : (i < 'h7f2) ? 8'h20 : (i < 'h7f7) ? 8'h70 :
 		(i < 'h7fa) ? 8'h78 : (i < 'h7fc) ? 8'h7c : (i < 'h7fe) ? 8'h7e : (i < 'h800) ? 8'h7f :
@@ -340,6 +247,8 @@ initial begin
 		(i < 'hf6f) ? 8'hc0 : (i < 'hf70) ? 8'he0 : (i < 'hf74) ? 8'hc0 : (i < 'hf7f) ? 8'he0 :
 		(i < 'hf80) ? 8'he3 : (i < 'hfb6) ? 8'he0 : (i < 'hfda) ? 8'hf0 : (i < 'hfeb) ? 8'hf8 :
 		(i < 'hff5) ? 8'hfc : (i < 'hff9) ? 8'hfe : 8'hff;
-end
+	end
+
+endgenerate
 
 endmodule

@@ -72,6 +72,8 @@ entity c64_mist is port
    SPI_SS3    : in    std_logic;
    SPI_SS4    : in    std_logic;
    CONF_DATA0 : in    std_logic;
+	
+	--TAPE_IN    : in    std_logic;
 
    UART_RX    : in    std_logic;
    UART_TX    : out   std_logic
@@ -105,6 +107,7 @@ component sdram is port
 );
 end component;
 
+
 constant CONF_STR : string := 
 	"C64;;"&
 	"S,D64,Mount Disk;"&
@@ -114,11 +117,12 @@ constant CONF_STR : string :=
 	"P1,Video & Audio;"&
 	"P2,System;"&
 	"P1O89,Scandoubler Fx,None,CRT 25%,CRT 50%,CRT 75%;"&
+	"P1OUV,Color Palette,C64,CePeCe,Pepto,Colodore;"&
 	"P1O2,Video standard,PAL,NTSC;"&
 	"P1OI,Tape sound,Off,On;"&
 	"P1OJ,Tape progress,Off,On;"&
-	"P1ODF,SID,6581 Mono,6581 Stereo,8580 Mono,8580 Stereo,Pseudo Stereo;"&
-	"P1O6,Audio filter,On,Off;"&
+	"P1ODE,SID,6581 Mono,8580 Mono,DualSid PseudoStereo,DualSid  Stereo;"&
+	"P1OKL,Digimax,Off,$DE00,$DF00;"&
 	"P2O3,Joysticks,Normal,Swapped;"&
 	"P2OG,Disk Write,Enable,Disable;"&
 	"P2O7,Userport,4-player IF,UART;"&
@@ -343,10 +347,10 @@ end component progressbar;
 	signal joyB_c64 : std_logic_vector(6 downto 0);
 	signal joyC_c64 : std_logic_vector(6 downto 0);
 	signal joyD_c64 : std_logic_vector(6 downto 0);
-	signal potA_x   : std_logic_vector(7 downto 0);
-	signal potA_y   : std_logic_vector(7 downto 0);
-	signal potB_x   : std_logic_vector(7 downto 0);
-	signal potB_y   : std_logic_vector(7 downto 0);
+	signal potA_x   : unsigned(7 downto 0);
+	signal potA_y   : unsigned(7 downto 0);
+	signal potB_x   : unsigned(7 downto 0);
+	signal potB_y   : unsigned(7 downto 0);
 	signal reset_key : std_logic;
 	
 	signal c64_r  : std_logic_vector(5 downto 0);
@@ -360,16 +364,17 @@ end component progressbar;
 	signal st_tape_sound       : std_logic;                    -- status(18)
 	signal st_tap_play_btn     : std_logic;                    -- status(17)
 	signal st_disk_readonly    : std_logic;                    -- status(16)
-	signal st_sid_mode         : std_logic_vector(2 downto 0); -- status(15 downto 13)
+	signal st_sid_mode         : std_logic_vector(1 downto 0); -- status(15 downto 13)
 	signal st_c64gs            : std_logic;                    -- status(11)
 	signal st_scandoubler_fx   : std_logic_vector(1 downto 0); -- status(9 downto 8)
 	signal st_user_port_uart   : std_logic;                    -- status(7)
-	signal st_audio_filter_off : std_logic;                    -- status(6)
+	signal st_digimax          : std_logic_vector(1 downto 0); -- status(6 downto 5)
 	signal st_detach_cartdrige : std_logic;                    -- status(5)
 	signal st_cia_mode         : std_logic;                    -- status(4)
 	signal st_swap_joystick    : std_logic;                    -- status(3)
 	signal st_ntsc             : std_logic;                    -- status(2)
 	signal st_reset            : std_logic;                    -- status(0)
+	signal st_palette          : std_logic_vector(1 downto 0);
 
 	signal sd_lba         : std_logic_vector(31 downto 0);
 	signal sd_rd          : std_logic_vector(1 downto 0);
@@ -567,16 +572,18 @@ begin
 	st_tape_sound       <= status(18);
 	st_tap_play_btn     <= status(17);
 	st_disk_readonly    <= status(16);
-	st_sid_mode         <= status(15 downto 13);
+	st_sid_mode         <= status(14 downto 13);
 	st_c64gs            <= status(11);
 	st_scandoubler_fx   <= status(9 downto 8);
 	st_user_port_uart   <= status(7);
-	st_audio_filter_off <= status(6);
+	st_digimax          <= status(21 downto 20);
 	st_detach_cartdrige <= status(5);
 	st_cia_mode         <= status(4);
 	st_swap_joystick    <= status(3);
 	st_ntsc             <= status(2);
 	st_reset            <= status(0);
+	st_palette          <= status(31 downto 30);
+
 
 	data_io_d: data_io
 	port map (
@@ -1039,6 +1046,7 @@ begin
 		romAddr => c64_rom_addr,
 		romCE => rom_ce,
 		ntscInitMode => ntsc_init_mode,
+		palette => st_palette,
 		hsync => hsync,
 		vsync => vsync,
 		r => r,
@@ -1075,8 +1083,8 @@ begin
 		idle => idle, -- second set of idle cycles
 		audio_data_l => audio_data_l,
 		audio_data_r => audio_data_r,
-		extfilter_en => not st_audio_filter_off,
-		sid_mode => st_sid_mode,
+		digimax_en   => st_digimax,
+		sid_mode   => st_sid_mode,
 		iec_data_o => c64_iec_data_o,
 		iec_atn_o  => c64_iec_atn_o,
 		iec_clk_o  => c64_iec_clk_o,
@@ -1102,13 +1110,13 @@ begin
 	);
 
 	-- paddle pins - mouse or GS controller
-	potA_x <= '0' & std_logic_vector(mouse_x_pos)(6 downto 1) & '0' when mouse_en = '1'
+	potA_x <= '0' & unsigned(mouse_x_pos)(6 downto 1) & '0' when mouse_en = '1'
 	          else x"00" when joyA_c64(5) = '1' else x"FF";
-	potA_y <= '0' & std_logic_vector(mouse_y_pos)(6 downto 1) & '0' when mouse_en = '1'
+	potA_y <= '0' & unsigned(mouse_y_pos)(6 downto 1) & '0' when mouse_en = '1'
 	          else x"00" when joyA_c64(6) = '1' else x"FF";
-	potB_x <= '0' & std_logic_vector(mouse_x_pos)(6 downto 1) & '0' when mouse_en = '1'
+	potB_x <= '0' & unsigned(mouse_x_pos)(6 downto 1) & '0' when mouse_en = '1'
 	          else x"00" when joyB_c64(5) = '1' else x"FF";
-	potB_y <= '0' & std_logic_vector(mouse_y_pos)(6 downto 1) & '0' when mouse_en = '1'
+	potB_y <= '0' & unsigned(mouse_y_pos)(6 downto 1) & '0' when mouse_en = '1'
 	          else x"00" when joyB_c64(6) = '1' else x"FF";
 
 	process(clk_c64, reset_n)
@@ -1307,7 +1315,8 @@ begin
 		cass_sense => cass_sense,
 		cass_run => cass_run,
 		osd_play_stop_toggle => st_tap_play_btn or tap_playstop_key,
-		ear_input => uart_rxD2 and not st_user_port_uart
+		--ear_input => TAPE_IN -- SiDi
+		ear_input => uart_rxD2 and not st_user_port_uart-- MiST
 	);
 
 	process(clk_c64)
