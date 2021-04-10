@@ -1,0 +1,7 @@
+set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) "sid_coeffs.vhd"]
+set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) "sid_voice_6581.vhd"]
+set_global_assignment -name VHDL_FILE [file join $::quartus(qip_path) "sid_filters.vhd"]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) cbm_sid.v ]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) sid_voice_8580.v ]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) sid_tables.v ]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) sid_envelope.v ]

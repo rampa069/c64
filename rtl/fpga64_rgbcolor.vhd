@@ -33,7 +33,7 @@ end fpga64_rgbcolor;
 
 architecture Behavioral of fpga64_rgbcolor is
 begin
-	process(index)
+	process(index,palette)
 	begin
 	if(palette = "00") then 
 		case index is --Default Palette by Rampa

@@ -120,8 +120,10 @@ constant CONF_STR : string :=
 	"P1OUV,Color Palette,C64,CePeCe,Pepto,Colodore;"&
 	"P1O2,Video standard,PAL,NTSC;"&
 	"P1OI,Tape sound,Off,On;"&
-	"P1OJ,Tape progress,Off,On;"&
-	"P1ODE,SID,6581 Mono,8580 Mono,DualSid PseudoStereo,DualSid  Stereo;"&
+	--"P1OJ,Tape progress,Off,On;"&
+	"P1OD,Left SID,6581,8580;"&
+	"P1OE,Right SID,6581,8580;"&
+	"P1OMN,Right SID ADDR,Same,$D420,$D500;"&
 	"P1OKL,Digimax,Off,$DE00,$DF00;"&
 	"P2O3,Joysticks,Normal,Swapped;"&
 	"P2OG,Disk Write,Enable,Disable;"&
@@ -374,6 +376,8 @@ end component progressbar;
 	signal st_swap_joystick    : std_logic;                    -- status(3)
 	signal st_ntsc             : std_logic;                    -- status(2)
 	signal st_reset            : std_logic;                    -- status(0)
+	signal st_sid_addr         : std_logic_vector(1 downto 0); -- status(23 downto 22)
+	
 	signal st_palette          : std_logic_vector(1 downto 0);
 
 	signal sd_lba         : std_logic_vector(31 downto 0);
@@ -573,6 +577,7 @@ begin
 	st_tap_play_btn     <= status(17);
 	st_disk_readonly    <= status(16);
 	st_sid_mode         <= status(14 downto 13);
+	st_sid_addr         <= status(23 downto 22);
 	st_c64gs            <= status(11);
 	st_scandoubler_fx   <= status(9 downto 8);
 	st_user_port_uart   <= status(7);
@@ -1085,6 +1090,7 @@ begin
 		audio_data_r => audio_data_r,
 		digimax_en   => st_digimax,
 		sid_mode   => st_sid_mode,
+		sid_addr   => st_sid_addr,
 		iec_data_o => c64_iec_data_o,
 		iec_atn_o  => c64_iec_atn_o,
 		iec_clk_o  => c64_iec_clk_o,
@@ -1325,17 +1331,17 @@ begin
 				progress_ce_pix <= not progress_ce_pix;
 		end if;
 	end process;
-
-	bar : progressbar
-	port map(
-		clk => clk_c64,
-		ce_pix => progress_ce_pix,
-		hblank => hblank,
-		vblank => vblank,
-		enable => not cass_run and st_tape_progress,
-		progress => std_logic_vector(tap_progress(6 downto 0)),
-		pix => progress
-	);
+--
+--	bar : progressbar
+--	port map(
+--		clk => clk_c64,
+--		ce_pix => progress_ce_pix,
+--		hblank => hblank,
+--		vblank => vblank,
+--		enable => not cass_run and st_tape_progress,
+--		progress => std_logic_vector(tap_progress(6 downto 0)),
+--		pix => progress
+--	);
 
 	comp_sync : entity work.composite_sync
 	port map(
@@ -1377,9 +1383,9 @@ begin
 
 		HSync       => not hsync_out,
 		VSync       => not vsync_out,
-		R           => c64_r or (progress&progress&progress&progress&progress&progress),
-		G           => c64_g or (progress&progress&progress&progress&progress&progress),
-		B           => c64_b or (progress&progress&progress&progress&progress&progress),
+		R           => c64_r , --or (progress&progress&progress&progress&progress&progress),
+		G           => c64_g , --or (progress&progress&progress&progress&progress&progress),
+		B           => c64_b , --or (progress&progress&progress&progress&progress&progress),
 
 		VGA_HS      => VGA_HS,
 		VGA_VS      => VGA_VS,

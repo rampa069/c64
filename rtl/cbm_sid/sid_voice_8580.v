@@ -1,6 +1,6 @@
 
 // altera message_off 10030
-module sid_voice
+module sid_voice_8580
 (
 	input         clock,
 	input         ce_1m,
@@ -141,11 +141,11 @@ always @(posedge (ce_1m)) begin
 	case (control[7:4])
 		4'b0001: wave_out = triangle;
 		4'b0010: wave_out = sawtooth;
-		4'b0011: wave_out = {_st_out, 4'b0000};
+		4'b0011: wave_out = {_st_out, 4'b1111};
 		4'b0100: wave_out = pulse;
-		4'b0101: wave_out = {p_t_out, 4'b0000}	 & pulse;
-		4'b0110: wave_out = {ps__out, 4'b0000}  & pulse;
-		4'b0111: wave_out = {pst_out, 4'b0000}	 & pulse;
+		4'b0101: wave_out = {p_t_out, 4'b1111}	 & pulse;
+		4'b0110: wave_out = {ps__out, 4'b1111}  & pulse;
+		4'b0111: wave_out = {pst_out, 4'b1111}	 & pulse;
 		4'b1000: wave_out = noise;
 		//default: wave_out = 0;
 	endcase
