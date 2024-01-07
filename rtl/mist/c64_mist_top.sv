@@ -154,7 +154,7 @@ c64_mist
 	.BUILD_DATE(`BUILD_DATE)
 )
 c64_mist (
-	.CLOCK_27(CLOCK_27),
+	.CLOCK_27(CLOCK_50),
 
 	.LED(LED),
 	.VGA_R(VGA_R),

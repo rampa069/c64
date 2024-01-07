@@ -152,7 +152,7 @@ begin
 end function;
 
 constant CONF_STR : string := 
-	"C64;;"&
+	"C65;;"&
 	"S0U,D64G64,Mount Disk;"&
 	"F2,CRTPRGTAPREU,Load;"& --2
 	"F3,ROM,Load;"& --3
@@ -1149,7 +1149,7 @@ begin
 		scandataout => pll_scandataout,
 		scandone => pll_scandone
 	);
-	SDRAM_CLK <= clk_ram;
+	SDRAM_CLK <= not clk_ram;
 
 	-- clock for 1541
 	pll_2 : entity work.pll
@@ -1257,7 +1257,21 @@ begin
 	            mist_cycle_wr;
 
 	SDRAM_CKE <= '1';
+	
+   sdramblock : block
+        signal initram : std_logic := '0';
+        signal pllsync : std_logic_vector(1 downto 0) := "00";
+    begin
 
+    -- Sync PLL 2's locked signal to the ram clock domain.
+    process(clk_ram) begin
+        if rising_edge(clk_ram) then
+            if pll_locked='1' then
+                pllsync<=pllsync(0)&pll_locked;
+            end if;
+        end if;
+    end process;
+	 
 	sdr: sdram port map(
 		sd_addr => SDRAM_A,
 		sd_data => SDRAM_DQ,
@@ -1274,11 +1288,13 @@ begin
 		din => sdram_data_in,
 		dout => sdram_data_out,
 		bs => sdram_bs,
-		init => not pll_locked,
+		init => not pllsync(1), -- not pll_locked,
 		we => sdram_we,
 		refresh => idle,
 		ce => sdram_ce
 	);
+	
+end block;
 
 	audio_data_l_mix <= audio_data_l when st_tape_sound = '0' else
 	                    audio_data_l + ((not (not cass_read or cass_write)) & "00000000000000");
